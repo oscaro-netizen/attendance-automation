@@ -1,0 +1,25 @@
+graph TD
+    slack_user[Slack User]
+    slack_app(Slack App)
+    fastapi_app[FastAPI App]
+    celery_worker[Celery Worker]
+    db[(PostgreSQL)]
+    redis((Redis))
+    marsos[MarsOS]
+
+    slack_user --> slack_app
+    slack_app --> fastapi_app
+
+    subgraph "Attendance Automation Platform"
+        direction LR
+        fastapi_app --> celery_worker
+        fastapi_app --> db
+        fastapi_app --> redis
+        celery_worker --> redis
+        celery_worker --> db
+    end
+
+    celery_worker --> marsos
+    marsos --> slack_user
+    fastapi_app --> slack_app
+    celery_worker --> slack_app
