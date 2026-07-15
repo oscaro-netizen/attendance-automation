@@ -15,8 +15,8 @@ class Employee(Base):
     marsos_email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     marsos_employee_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     marsos_password_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     attendance_logs: Mapped[List["AttendanceLog"]] = relationship(back_populates="employee")
 
@@ -32,6 +32,6 @@ class AttendanceLog(Base):
     status: Mapped[str] = mapped_column(String(50)) # success, duplicate, failure
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     response_time: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     employee: Mapped["Employee"] = relationship(back_populates="attendance_logs")

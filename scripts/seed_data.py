@@ -23,7 +23,8 @@ async def seed_employee():
             slack_user_id="U_TEST_123",
             slack_username="test_user",
             marsos_email="test@example.com",
-            marsos_employee_id="EMP_TEST_001"
+            marsos_employee_id="EMP_TEST_001",
+            marsos_password="test_password"
         )
         
         new_emp = await repo.create(test_employee)

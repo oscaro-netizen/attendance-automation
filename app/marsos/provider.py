@@ -8,9 +8,11 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 from loguru import logger
 from app.core.config import settings
 
-# Directory for storing browser sessions
+# Directory for storing browser sessions and traces
 SESSION_DIR = "sessions"
+TRACE_DIR = "traces"
 os.makedirs(SESSION_DIR, exist_ok=True)
+os.makedirs(TRACE_DIR, exist_ok=True)
 
 class AttendanceProvider(ABC):
     @abstractmethod
@@ -49,6 +51,7 @@ class MarsOSPlaywrightProvider(AttendanceProvider):
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
+        self.trace_saved = False
 
     def _get_session_path(self, email: str) -> str:
         # Sanitize email for filename
@@ -68,6 +71,10 @@ class MarsOSPlaywrightProvider(AttendanceProvider):
                 self.context = await self.browser.new_context(storage_state=session_path)
             else:
                 self.context = await self.browser.new_context()
+
+            # Start Playwright tracing
+            await self.context.tracing.start(screenshots=True, snapshots=True, sources=True)
+            self.trace_saved = False
 
             self.page = await self.context.new_page()
             
@@ -97,6 +104,11 @@ class MarsOSPlaywrightProvider(AttendanceProvider):
             return True
         except Exception as e:
             logger.error(f"Failed to login to MarsOS: {str(e)}")
+            if self.context and not self.trace_saved:
+                trace_path = os.path.join(TRACE_DIR, f"failure_login_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip")
+                await self.context.tracing.stop(path=trace_path)
+                self.trace_saved = True
+                logger.info(f"Saved failure login trace to {trace_path}")
             if self.page:
                 await self.page.screenshot(path=f"failure_login_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
             await self.close()
@@ -126,12 +138,23 @@ class MarsOSPlaywrightProvider(AttendanceProvider):
             return True
         except Exception as e:
             logger.error(f"Failed to start attendance in MarsOS: {str(e)}")
+            if self.context and not self.trace_saved:
+                trace_path = os.path.join(TRACE_DIR, f"failure_attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip")
+                await self.context.tracing.stop(path=trace_path)
+                self.trace_saved = True
+                logger.info(f"Saved failure attendance trace to {trace_path}")
             if self.page:
                 await self.page.screenshot(path=f"failure_attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
             return False
 
     async def close(self) -> None:
         """Closes browser and stops playwright."""
+        if self.context:
+            try:
+                if not getattr(self, "trace_saved", False):
+                    await self.context.tracing.stop()
+            except Exception as e:
+                logger.error(f"Failed to stop Playwright tracing on close: {str(e)}")
         if self.browser:
             await self.browser.close()
         if self.playwright:
