@@ -1,0 +1,59 @@
+[tool.poetry]
+package-mode = false
+
+[project]
+name = "attendance-automation"
+version = "0.1.0"
+description = "Slack to MarsOS Attendance Automation Platform"
+authors = [
+    { name = "Manus AI", email = "ai@manus.im" }
+]
+dependencies = [
+    "fastapi~=0.139.0",
+    "uvicorn~=0.51.0",
+    "sqlalchemy~=2.0.30",
+    "alembic~=1.13.1",
+    "pydantic-settings~=2.3.3",
+    "loguru~=0.7.2",
+    "celery~=5.4.0",
+    "redis~=5.0.7",
+    "asyncpg~=0.29.0",
+    "psycopg2-binary~=2.9.9",
+    "python-dotenv~=1.0.1",
+    "httpx~=0.27.0",
+    "aiohttp~=3.9.5",
+    "slack_sdk~=3.28.0",
+    "playwright~=1.61.0",
+    "cryptography~=42.0.8",
+    "email-validator~=2.1.0",
+    "python-multipart~=0.0.9",
+    "pytest-asyncio~=0.23.7"
+]
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[project.optional-dependencies]
+dev = [
+    "pytest~=8.4.0",
+    "pytest-asyncio~=0.23.7",
+    "ruff~=0.4.9",
+    "black~=24.4.2",
+    "mypy~=1.10.0",
+    "pytest-cov~=4.1.0",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.black]
+line-length = 120
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
