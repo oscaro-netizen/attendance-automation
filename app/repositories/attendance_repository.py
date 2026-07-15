@@ -26,6 +26,12 @@ class AttendanceRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_log_by_event_id(self, slack_event_id: str) -> Optional[AttendanceLog]:
+        result = await self.db.execute(
+            select(AttendanceLog).where(AttendanceLog.slack_event_id == slack_event_id)
+        )
+        return result.scalar_one_or_none()
+
     async def create_log(self, log_in: AttendanceLogCreate) -> AttendanceLog:
         db_log = AttendanceLog(**log_in.model_dump())
         self.db.add(db_log)

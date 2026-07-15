@@ -1,5 +1,8 @@
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+
+load_dotenv() # Load environment variables from .env file
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Attendance Automation"
@@ -20,6 +23,9 @@ class Settings(BaseSettings):
     MARSOS_BASE_URL: str
     MARSOS_API_KEY: Optional[str] = None
     
+    # Encryption Key
+    ENCRYPTION_KEY: str
+
     # Playwright Configuration
     PLAYWRIGHT_HEADLESS: bool = True
     

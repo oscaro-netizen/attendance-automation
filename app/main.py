@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api import slack_events, health, employees, attendance
+from app.api import slack_events, health, employees, attendance, celery_health
 from app.core.config import settings
 from app.middleware.security import AuditLogMiddleware
 
@@ -14,6 +14,7 @@ app.include_router(health.router, tags=["health"])
 app.include_router(slack_events.router, prefix=settings.API_V1_STR, tags=["slack"])
 app.include_router(employees.router, prefix=settings.API_V1_STR, tags=["employees"])
 app.include_router(attendance.router, prefix=settings.API_V1_STR, tags=["attendance"])
+app.include_router(celery_health.router, prefix=settings.API_V1_STR, tags=["celery_health"])
 
 @app.get("/")
 async def root():

@@ -1,16 +1,19 @@
-version: '3.9'
-
 services:
   db:
     image: postgres:16-alpine
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
+    restart: unless-stopped
+
     environment:
       POSTGRES_DB: attendance_db
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
+
     ports:
       - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d attendance_db"]
       interval: 5s
@@ -19,6 +22,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+
     ports:
       - "6379:6379"
 
@@ -26,18 +31,23 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
-    volumes:
-      - .:/app
+
+    restart: unless-stopped
+
+    command: /app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+
     ports:
       - "8000:8000"
+
     environment:
       DATABASE_URL: postgresql+asyncpg://user:password@db:5432/attendance_db
       REDIS_URL: redis://redis:6379/0
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
       MARSOS_BASE_URL: ${MARSOS_BASE_URL}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       PLAYWRIGHT_HEADLESS: ${PLAYWRIGHT_HEADLESS:-true}
+
     depends_on:
       db:
         condition: service_healthy
@@ -48,22 +58,24 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    command: celery -A app.workers.celery_worker worker --loglevel=info
-    volumes:
-      - .:/app
+
+    restart: unless-stopped
+
+    command: /app/.venv/bin/celery -A app.workers.celery_worker:celery_app worker --loglevel=info
+
     environment:
       DATABASE_URL: postgresql+asyncpg://user:password@db:5432/attendance_db
       REDIS_URL: redis://redis:6379/0
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
       MARSOS_BASE_URL: ${MARSOS_BASE_URL}
-      PLAYWRIGHT_HEADLESS: ${PLAYWRTIGHT_HEADLESS:-true}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      PLAYWRIGHT_HEADLESS: ${PLAYWRIGHT_HEADLESS:-true}
+
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
-      app:
         condition: service_started
 
 volumes:

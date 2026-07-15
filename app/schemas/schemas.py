@@ -9,7 +9,14 @@ class EmployeeBase(BaseModel):
     marsos_employee_id: str
 
 class EmployeeCreate(EmployeeBase):
-    pass
+    marsos_password: str
+
+class EmployeeResponse(EmployeeBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class EmployeeUpdate(BaseModel):
     slack_username: Optional[str] = None
@@ -26,6 +33,7 @@ class Employee(EmployeeBase):
 class AttendanceLogBase(BaseModel):
     employee_id: int
     date: datetime
+    slack_event_id: Optional[str] = None
     started: bool
     status: str
     failure_reason: Optional[str] = None

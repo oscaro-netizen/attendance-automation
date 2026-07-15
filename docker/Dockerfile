@@ -1,15 +1,47 @@
-FROM python:3.13-slim-bookworm
+# ----------------------------
+# Builder Stage
+# ----------------------------
+FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /app
 
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONUNBUFFERED=1
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+ENV POETRY_REQUESTS_TIMEOUT=300
 
-COPY pyproject.toml ./ 
+# Install Poetry
+RUN pip install --no-cache-dir poetry
 
-RUN pip install --no-cache-dir -r <(grep "^\s*\S" pyproject.toml | sed -n "/^dependencies/,/^requires-python/p" | sed "1d;\$d" | sed "s/\s*\([a-zA-Z0-9_-]*\)~=\([0-9.]*\)/\1==\2/g")
+# Copy dependency files first (better Docker cache)
+COPY pyproject.toml poetry.lock ./
 
+# Install dependencies into /app/.venv
+RUN poetry install --no-root --no-interaction --no-ansi
+
+# ----------------------------
+# Runtime Stage
+# ----------------------------
+FROM python:3.11-slim-bookworm AS runtime
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy virtual environment
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application source
 COPY . .
 
-RUN playwright install-deps && playwright install
+# Install Chromium only
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends chromium && \
+    rm -rf /var/lib/apt/lists/*
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Install Playwright browser + required Linux dependencies
+RUN playwright install --with-deps chromium
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

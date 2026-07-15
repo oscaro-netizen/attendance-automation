@@ -24,6 +24,7 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
         user = event.get("user")
         text = event.get("text", "")
         subtype = event.get("subtype")
+        event_id = data.get("event_id")
         
         # Ignore bot messages, edits, deletions, and thread replies
         if subtype or event.get("thread_ts"):
@@ -39,7 +40,7 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
             
             # Trigger attendance automation in background via Celery
             from app.workers.celery_worker import process_attendance_task
-            process_attendance_task.delay(user)
+            process_attendance_task.delay(user, event_id, channel)
             
             return {"status": "processing"}
         else:
