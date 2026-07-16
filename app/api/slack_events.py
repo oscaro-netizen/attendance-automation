@@ -1,6 +1,4 @@
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from app.middleware.slack_verification import verify_slack_signature
 from app.slack.validator import SlackMessageValidator
 from app.core.config import settings
@@ -8,10 +6,8 @@ from loguru import logger
 import json
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/events", dependencies=[Depends(verify_slack_signature)])
-@limiter.limit("30/minute")
 async def slack_events(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     
