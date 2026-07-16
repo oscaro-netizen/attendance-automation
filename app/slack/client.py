@@ -29,3 +29,10 @@ class SlackClient:
     async def send_failure_reply(self, channel: str, user_id: str, thread_ts: str = None):
         text = f"<@{user_id}> Unable to start attendance. The issue has been logged."
         return await self.send_message(channel, text, thread_ts)
+
+    async def send_unregistered_reply(self, channel: str, user_id: str, thread_ts: str = None):
+        text = (
+            f"<@{user_id}> You are not registered for attendance automation yet. "
+            f"Please contact an administrator to be added."
+        )
+        return await self.send_message(channel, text, thread_ts)
