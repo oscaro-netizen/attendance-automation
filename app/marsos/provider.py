@@ -22,6 +22,10 @@ class AttendanceProvider(ABC):
         pass
 
     @abstractmethod
+    async def stop_attendance(self, employee_id: str) -> bool:
+        pass
+
+    @abstractmethod
     async def logout(self) -> None:
         pass
 
@@ -35,6 +39,10 @@ class MarsOSAPIProvider(AttendanceProvider):
 
     async def start_attendance(self, employee_id: str) -> bool:
         # Implement API start attendance
+        return True
+
+    async def stop_attendance(self, employee_id: str) -> bool:
+        # Implement API stop attendance
         return True
 
     async def logout(self) -> None:
@@ -128,6 +136,34 @@ class MarsOSPlaywrightProvider(AttendanceProvider):
             logger.error(f"Failed to start attendance in MarsOS: {str(e)}")
             if self.page:
                 await self.page.screenshot(path=f"failure_attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            return False
+
+    async def stop_attendance(self, employee_id: str) -> bool:
+        try:
+            if not self.page:
+                raise Exception("Not logged in")
+
+            await self.page.goto(f"{settings.MARSOS_BASE_URL}/attendance")
+
+            # Check if already stopped using the same robust data-testid pattern
+            # used by start_attendance's already-started check.
+            already_stopped = await self.page.query_selector("[data-testid='attendance-status-ended']")
+            if already_stopped:
+                logger.info(f"Attendance already stopped for employee {employee_id}")
+                return True
+
+            stop_button = self.page.get_by_role("button", name="End Workday")
+            await stop_button.click()
+
+            # Wait for success indicator
+            await self.page.wait_for_selector("[data-testid='attendance-status-ended']", timeout=15000)
+
+            logger.info(f"Attendance stopped successfully for employee {employee_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to stop attendance in MarsOS: {str(e)}")
+            if self.page:
+                await self.page.screenshot(path=f"failure_stop_attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
             return False
 
     async def close(self) -> None:

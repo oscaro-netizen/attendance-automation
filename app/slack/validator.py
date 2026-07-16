@@ -24,7 +24,13 @@ class SlackMessageValidator:
     
     # Pattern to match "Expected Today:" section
     EXPECTED_PATTERN = re.compile(r"Expected Today:", re.IGNORECASE)
-    
+
+    # Pattern to match the "End" keyword for the DM-based stop/clock-out
+    # message, e.g. "July 16, 2026 - End". Unlike the start report, this is
+    # intentionally a single short line -- no Tasks/Expected sections --
+    # since it's sent as a quick DM to the bot at end of day.
+    END_PATTERN = re.compile(r".* - End", re.IGNORECASE)
+
     @classmethod
     def is_valid_start_report(cls, text: str) -> bool:
         if not text:
@@ -36,3 +42,9 @@ class SlackMessageValidator:
         has_expected = bool(cls.EXPECTED_PATTERN.search(text))
         
         return has_start and has_tasks and has_expected
+
+    @classmethod
+    def is_valid_end_report(cls, text: str) -> bool:
+        if not text:
+            return False
+        return bool(cls.END_PATTERN.search(text))

@@ -6,6 +6,12 @@ concerns (signature verification, JSON/schema parsing, URL verification,
 and translating a `SlackEventResult` into an HTTP response). Every
 decision about *what to do* with a validated event lives here, so it can
 be unit tested without spinning up FastAPI, Celery, or Redis.
+
+Phase 2 note: this service now routes two distinct actions from a single
+webhook -- Start (posted in the monitored team channel) and Stop (sent as
+a DM to the bot). They share every pipeline stage except the message
+pattern that identifies them and the channel-context rule that validates
+them; see `_classify_message` and the branch in `process_event`.
 """
 from __future__ import annotations
 
@@ -22,7 +28,7 @@ from app.schemas.slack_schemas import SlackEventEnvelope
 from app.slack.client import SlackClient
 from app.slack.event_deduplicator import SlackEventDeduplicator
 from app.slack.validator import SlackMessageValidator
-from app.workers.celery_worker import process_attendance_task
+from app.workers.celery_worker import process_attendance_stop_task, process_attendance_task
 
 # Event types this pipeline acts on. Any other event type subscribed to in
 # the Slack app configuration (e.g. `app_mention`, `reaction_added`) is
@@ -42,12 +48,20 @@ IGNORED_MESSAGE_SUBTYPES = {
 }
 
 
+class MessageKind(str, Enum):
+    START = "start"
+    STOP = "stop"
+    NONE = "none"
+
+
 class SlackEventOutcome(str, Enum):
     QUEUED = "queued"
+    QUEUED_STOP = "queued_stop"
     IGNORED_BOT_EVENT = "ignored_bot_event"
     IGNORED_UNSUPPORTED_EVENT = "ignored_unsupported_event"
     IGNORED_MESSAGE_SUBTYPE = "ignored_message_subtype"
     IGNORED_WRONG_CHANNEL = "ignored_wrong_channel"
+    IGNORED_STOP_NOT_DM = "ignored_stop_not_dm"
     IGNORED_INVALID_FORMAT = "ignored_invalid_format"
     IGNORED_MISSING_EVENT_ID = "ignored_missing_event_id"
     DUPLICATE_EVENT = "duplicate_event"
@@ -71,9 +85,12 @@ class SlackEventService:
 
         Ignore Bot Events
           -> Ignore Unsupported Events
+          -> Classify message as Start / Stop / neither, and validate the
+             channel context that action requires (team channel for Start,
+             a DM with the bot for Stop)
           -> Prevent Duplicate Events
           -> Resolve Employee
-          -> Queue Celery Task
+          -> Queue the matching Celery task (start or stop)
 
     Playwright automation is never invoked here or anywhere in the FastAPI
     process -- only a Celery task signature is dispatched, and the worker
@@ -91,6 +108,14 @@ class SlackEventService:
         self._deduplicator = deduplicator
         self._employee_repo = employee_repo or EmployeeRepository(db)
         self._slack_client = slack_client or SlackClient()
+
+    @staticmethod
+    def _classify_message(text: Optional[str]) -> MessageKind:
+        if SlackMessageValidator.is_valid_start_report(text):
+            return MessageKind.START
+        if SlackMessageValidator.is_valid_end_report(text):
+            return MessageKind.STOP
+        return MessageKind.NONE
 
     async def process_event(self, envelope: SlackEventEnvelope, request_id: str) -> SlackEventResult:
         log = logger.bind(request_id=request_id, event_id=envelope.event_id)
@@ -119,13 +144,24 @@ class SlackEventService:
             log.debug(f"Ignoring message subtype/thread reply: subtype={event.subtype}")
             return SlackEventResult(SlackEventOutcome.IGNORED_MESSAGE_SUBTYPE, detail=event.subtype)
 
-        if settings.SLACK_CHANNEL_ID and event.channel != settings.SLACK_CHANNEL_ID:
-            log.debug(f"Ignoring event from unmonitored channel: {event.channel}")
-            return SlackEventResult(SlackEventOutcome.IGNORED_WRONG_CHANNEL, detail=event.channel)
+        # --- Classify Start vs Stop, and enforce each action's channel rule ------
+        kind = self._classify_message(event.text)
 
-        if not SlackMessageValidator.is_valid_start_report(event.text):
-            log.debug("Ignoring message that does not match the expected start-report format")
+        if kind is MessageKind.NONE:
+            log.debug("Ignoring message that matches neither the start nor stop format")
             return SlackEventResult(SlackEventOutcome.IGNORED_INVALID_FORMAT)
+
+        if kind is MessageKind.START:
+            if settings.SLACK_CHANNEL_ID and event.channel != settings.SLACK_CHANNEL_ID:
+                log.debug(f"Ignoring start report from unmonitored channel: {event.channel}")
+                return SlackEventResult(SlackEventOutcome.IGNORED_WRONG_CHANNEL, detail=event.channel)
+        else:  # MessageKind.STOP
+            # Stop is only accepted as a DM to the bot, never from the team
+            # channel -- keeps end-of-day noise out of the shared channel and
+            # avoids a stray "- End" in normal conversation triggering automation.
+            if event.channel_type != "im":
+                log.debug(f"Ignoring stop message outside a DM: channel_type={event.channel_type}")
+                return SlackEventResult(SlackEventOutcome.IGNORED_STOP_NOT_DM, detail=event.channel_type)
 
         # --- Prevent Duplicate Events --------------------------------------------
         # Every actionable event must carry Slack's event_id; without it we
@@ -151,10 +187,15 @@ class SlackEventService:
         # Attendance automation (Playwright) runs exclusively in the Celery
         # worker process. FastAPI's only responsibility is dispatch.
         try:
-            task = process_attendance_task.delay(event.user, envelope.event_id, event.channel)
+            if kind is MessageKind.START:
+                task = process_attendance_task.delay(event.user, envelope.event_id, event.channel)
+                outcome = SlackEventOutcome.QUEUED
+            else:
+                task = process_attendance_stop_task.delay(event.user, envelope.event_id, event.channel)
+                outcome = SlackEventOutcome.QUEUED_STOP
         except Exception as exc:
             log.exception("Failed to enqueue Celery task for Slack event")
             raise SlackEventQueueError(str(exc)) from exc
 
-        log.bind(celery_task_id=task.id).info("Queued attendance automation task")
-        return SlackEventResult(SlackEventOutcome.QUEUED, celery_task_id=task.id)
+        log.bind(celery_task_id=task.id).info(f"Queued attendance automation task ({kind.value})")
+        return SlackEventResult(outcome, celery_task_id=task.id)

@@ -39,6 +39,14 @@ class AttendanceLogBase(BaseModel):
     failure_reason: Optional[str] = None
     response_time: Optional[float] = None
 
+    # Stop / clock-out lifecycle (Phase 2) — mirrors the start fields above.
+    ended: bool = False
+    ended_at: Optional[datetime] = None
+    stop_slack_event_id: Optional[str] = None
+    stop_status: Optional[str] = None
+    stop_failure_reason: Optional[str] = None
+    stop_response_time: Optional[float] = None
+
 class AttendanceLogCreate(AttendanceLogBase):
     started_at: Optional[datetime] = None
 
