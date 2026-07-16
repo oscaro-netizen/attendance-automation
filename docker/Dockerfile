@@ -1,47 +1,44 @@
-# ----------------------------
-# Builder Stage
-# ----------------------------
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.11-slim-bookworm as builder
 
 WORKDIR /app
 
-ENV PYTHONUNBUFFERED=1
-ENV POETRY_VIRTUALENVS_IN_PROJECT=true
-ENV POETRY_REQUESTS_TIMEOUT=300
+ENV PYTHONUNBUFFERED 1
 
 # Install Poetry
-RUN pip install --no-cache-dir poetry
+RUN pip install poetry
 
-# Copy dependency files first (better Docker cache)
-COPY pyproject.toml poetry.lock ./
+# Copy pyproject.toml and poetry.lock
+COPY pyproject.toml poetry.lock ./ 
 
-# Install dependencies into /app/.venv
-RUN poetry install --no-root --no-interaction --no-ansi
+# Install project dependencies into a virtual environment
+RUN poetry config virtualenvs.in-project true \
+    && poetry install --no-root --no-interaction --no-ansi
 
-# ----------------------------
-# Runtime Stage
-# ----------------------------
-FROM python:3.11-slim-bookworm AS runtime
+# --- Runtime Stage ---
+FROM python:3.11-slim-bookworm as runtime
 
 WORKDIR /app
 
-ENV PYTHONUNBUFFERED=1
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONUNBUFFERED 1
 
-# Copy virtual environment
+# Copy the virtual environment from the builder stage
 COPY --from=builder /app/.venv /app/.venv
 
-# Copy application source
+# Add poetry to PATH (if needed for CMD, otherwise remove)
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Install Playwright system dependencies and browsers
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-wqy-zenhei \
+    fonts-noto-color-emoji \
+    fonts-freefont-ttf \
+    && playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY . .
 
-# Install Chromium only
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends chromium && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install Playwright browser + required Linux dependencies
-RUN playwright install --with-deps chromium
-
+# Expose port for FastAPI
 EXPOSE 8000
 
+# Command to run the FastAPI application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
