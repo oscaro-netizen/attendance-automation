@@ -31,8 +31,13 @@ htmlcov/
 # Playwright
 playwright-report/
 test-results/
+traces/
+sessions/
+failure_*.png
 test_*.db
 
 # Tests
 tests/
 pytest.ini
+test_*.db
+*.db
