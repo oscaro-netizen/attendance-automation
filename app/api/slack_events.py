@@ -22,20 +22,24 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
     if event_type == "message":
         channel = event.get("channel")
         user = event.get("user")
-        text = event.get("text", "").strip()
+        text = event.get("text", "").strip().strip("*_`~").strip()
         subtype = event.get("subtype")
         event_id = data.get("event_id")
         
-        # Ignore bot messages, edits, and deletions
-        if subtype or event.get("thread_ts"):
-            return {"status": "ignored"}
-
         # --- UPDATED CHANNEL LOGIC ---
         # Allow DMs (channel IDs starting with 'D') or the specific configured channel
-        is_dm = channel.startswith('D')
+        is_dm = channel.startswith('D') if channel else False
         is_main_channel = settings.SLACK_CHANNEL_ID and channel == settings.SLACK_CHANNEL_ID
         
+        logger.info(f"Received message: channel={channel}, user={user}, text='{text}', subtype={subtype}, is_dm={is_dm}, is_main_channel={is_main_channel}")
+
+        # Ignore bot messages, edits, and deletions
+        if subtype or event.get("thread_ts"):
+            logger.info(f"Ignoring message: subtype={subtype}, thread_ts={event.get('thread_ts')}")
+            return {"status": "ignored"}
+
         if not (is_dm or is_main_channel):
+            logger.info(f"Ignoring message: channel {channel} is not a DM or configured main channel")
             return {"status": "ignored"}
         # -----------------------------
 
