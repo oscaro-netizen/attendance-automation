@@ -103,7 +103,7 @@ class AttendanceService:
 
     async def process_logout(self, slack_user_id: str, slack_event_id: str = None, channel_id: str = None):
         """
-        Handles the logout process (\stop) for a user.
+        Handles the logout process (\end) for a user.
         """
         logger.info(f"Processing logout for user {slack_user_id}")
         

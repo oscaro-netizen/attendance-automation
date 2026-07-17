@@ -59,7 +59,7 @@ def process_attendance_task(self, slack_user_id: str, slack_event_id: str = None
     retry_backoff=True
 )
 def process_logout_task(self, slack_user_id: str, slack_event_id: str = None, channel_id: str = None):
-    logger.info(f"Starting logout task (\\stop) for user: {slack_user_id}")
+    logger.info(f"Starting logout task (\\end) for user: {slack_user_id}")
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:

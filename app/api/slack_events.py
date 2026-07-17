@@ -39,12 +39,12 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
             return {"status": "ignored"}
         # -----------------------------
 
-        # Handle \stop command (Works in DMs and Main Channel)
-        if text == "\\stop":
-            logger.info(f"Stop request received from user {user} in {'DM' if is_dm else 'channel'}")
+        # Handle \end command (Works in DMs and Main Channel)
+        if text == "\\end":
+            logger.info(f"End workday request received from user {user} in {'DM' if is_dm else 'channel'}")
             from app.workers.celery_worker import process_logout_task
             process_logout_task.delay(user, event_id, channel)
-            return {"status": "processing_stop"}
+            return {"status": "processing_end"}
             
         # Handle start report (Works in Main Channel)
         if SlackMessageValidator.is_valid_start_report(text):
