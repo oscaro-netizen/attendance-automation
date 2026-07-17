@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     SLACK_SIGNING_SECRET: str
     SLACK_BOT_TOKEN: str
     SLACK_CHANNEL_ID: Optional[str] = None
+    SLACK_REQUEST_TIMESTAMP_TOLERANCE_SECONDS: int = 300
+    SLACK_EVENT_DEDUPE_TTL_SECONDS: int = 600
     
     # Database Configuration
     DATABASE_URL: str
@@ -29,6 +31,6 @@ class Settings(BaseSettings):
     # Playwright Configuration
     PLAYWRIGHT_HEADLESS: bool = True
     
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
 settings = Settings()

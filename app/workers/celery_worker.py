@@ -5,10 +5,12 @@ from app.services.attendance_service import AttendanceService
 from loguru import logger
 import asyncio
 
+# Define celery_app to match docker-compose and keep app as an alias
 celery_app = Celery("attendance_tasks", broker=settings.REDIS_URL)
+app = celery_app
 
 # Configure Celery to handle retries and serialization
-celery_app.conf.update(
+app.conf.update(
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
@@ -18,36 +20,49 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
 )
 
+# Helper to run async functions in Celery
 async def run_attendance_automation(slack_user_id: str, slack_event_id: str = None, channel_id: str = None):
     async with AsyncSessionLocal() as db:
         service = AttendanceService(db)
         await service.process_attendance(slack_user_id, slack_event_id, channel_id)
 
-@celery_app.task(
+# NEW Helper for logout
+async def run_logout_automation(slack_user_id: str, slack_event_id: str = None, channel_id: str = None):
+    async with AsyncSessionLocal() as db:
+        service = AttendanceService(db)
+        await service.process_logout(slack_user_id, slack_event_id, channel_id)
+
+@app.task(
     name="process_attendance",
     bind=True,
     max_retries=3,
-    default_retry_delay=60, # 1 minute
+    default_retry_delay=60,
     autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_backoff_max=600, # 10 minutes
-    retry_jitter=True
+    retry_backoff=True
 )
 def process_attendance_task(self, slack_user_id: str, slack_event_id: str = None, channel_id: str = None):
-    """
-    Celery task to trigger attendance automation with retries.
-    """
-    logger.info(f"Starting attendance task for user: {slack_user_id}, event: {slack_event_id}")
+    logger.info(f"Starting attendance task for user: {slack_user_id}")
     try:
-        # Check if a loop is already running
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-        return loop.run_until_complete(run_attendance_automation(slack_user_id, slack_event_id, channel_id))
-    except Exception as exc:
-        logger.error(f"Task failed for user {slack_user_id}: {exc}")
-        # Re-raise to trigger Celery's autoretry_for
-        raise exc
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(run_attendance_automation(slack_user_id, slack_event_id, channel_id))
+
+# --- NEW: Logout Task ---
+@app.task(
+    name="process_logout_task",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    autoretry_for=(Exception,),
+    retry_backoff=True
+)
+def process_logout_task(self, slack_user_id: str, slack_event_id: str = None, channel_id: str = None):
+    logger.info(f"Starting logout task (\\stop) for user: {slack_user_id}")
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(run_logout_automation(slack_user_id, slack_event_id, channel_id))

@@ -141,3 +141,36 @@ class MarsOSPlaywrightProvider(AttendanceProvider):
     async def logout(self) -> None:
         """Alias for close to maintain interface consistency."""
         await self.close()
+
+        
+    async def logout_attendance(self, employee_id: str) -> bool:
+        """
+        Navigates to the attendance page and clicks the 'End Workday' button.
+        """
+        try:
+            if not self.page:
+                logger.error("No active page found. Ensure login() was called first.")
+                return False
+                
+            await self.page.goto(f"{settings.MARSOS_BASE_URL}/attendance")
+            
+            # 1. Look for the 'End Workday' button. 
+            # Note: If the button text is different (e.g. 'Clock Out'), change it here.
+            stop_button = self.page.get_by_role("button", name="End Workday")
+            
+            try:
+                await stop_button.wait_for(state="visible", timeout=10000)
+                await stop_button.click()
+                # 2. Wait for the status to change to indicate it stopped
+                await self.page.wait_for_selector("[data-testid='attendance-status-stopped']", timeout=15000)
+                logger.info(f"Attendance stopped successfully for employee {employee_id}")
+                return True
+            except Exception as e:
+                logger.warning(f"Stop button not found or not clickable: {str(e)}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to stop attendance in MarsOS: {str(e)}")
+            if self.page:
+                await self.page.screenshot(path=f"failure_stop_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            return False
