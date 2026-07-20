@@ -24,6 +24,7 @@ htmlcov/
 # Environment
 .env
 .env.*
+!.env.example
 
 # Logs
 *.log
@@ -33,10 +34,8 @@ playwright-report/
 test-results/
 traces/
 sessions/
+artifacts/
 failure_*.png
 
-# Tests
-tests/
-pytest.ini
-test_*.db
+# Local databases (the test suite uses an in-memory database and needs none)
 *.db
