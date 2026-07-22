@@ -119,10 +119,10 @@ class SlackEventService:
 
     @staticmethod
     def _classify(text: Optional[str]) -> Optional[SlackEventAction]:
-        if SlackMessageValidator.is_end_command(text):
-            return SlackEventAction.END
         if SlackMessageValidator.is_valid_start_report(text):
             return SlackEventAction.START
+        if SlackMessageValidator.is_valid_end_report(text) or SlackMessageValidator.is_end_command(text):
+            return SlackEventAction.END
         return None
 
     async def process_event(self, envelope: SlackEventEnvelope, request_id: str) -> SlackEventResult:

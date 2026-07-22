@@ -1,80 +1,56 @@
-"""
-HTTP controller for the Slack Events API.
-
-Responsibilities are deliberately limited to HTTP concerns: signature
-verification, payload parsing, the `url_verification` handshake, and mapping a
-`SlackEventResult` onto a response body. All decision-making lives in
-`app.services.slack_event_service`.
-
-Slack retries any event it does not receive a 2xx for within 3 seconds, so this
-handler always answers 200 for a well-formed, correctly signed payload -- even
-when the event is ignored. Only a genuine server-side failure to enqueue work
-returns 5xx, which is precisely the case where a Slack retry is useful.
-"""
-import uuid
-
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from loguru import logger
-from pydantic import ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.database.session import get_db
+from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from app.middleware.slack_verification import verify_slack_signature
-from app.schemas.slack_schemas import SlackEventEnvelope
-from app.services.slack_event_service import (
-    SlackEventQueueError,
-    SlackEventService,
-)
-from app.slack.event_deduplicator import SlackEventDeduplicator, get_event_deduplicator
+from app.slack.validator import SlackMessageValidator
+from app.core.config import settings
+from loguru import logger
+import json
 
 router = APIRouter()
 
-
 @router.post("/events", dependencies=[Depends(verify_slack_signature)])
-async def slack_events(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    deduplicator: SlackEventDeduplicator = Depends(get_event_deduplicator),
-):
-    request_id = str(uuid.uuid4())
-    log = logger.bind(request_id=request_id)
-
-    try:
-        payload = await request.json()
-    except ValueError:
-        log.warning("Slack request body was not valid JSON")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed JSON payload")
-
-    try:
-        envelope = SlackEventEnvelope.model_validate(payload)
-    except ValidationError as exc:
-        log.warning(f"Slack payload failed schema validation: {exc.errors()}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Slack payload")
+async def slack_events(request: Request, background_tasks: BackgroundTasks):
+    data = await request.json()
 
     # Handle URL verification challenge
-    if envelope.is_url_verification:
-        log.info("Responding to Slack url_verification challenge")
-        return {"challenge": envelope.challenge}
+    if data.get("type") == "url_verification":
+        return {"challenge": data.get("challenge")}
+        
+    event = data.get("event", {})
+    event_type = event.get("type")
+    
+    # We listen for messages
+    if event_type == "message":
+        channel = event.get("channel")
+        user = event.get("user")
+        text = event.get("text", "").strip()
+        subtype = event.get("subtype")
+        event_id = data.get("event_id")
+        
+        # Ignore bot messages, edits, and deletions
+        if subtype or event.get("thread_ts"):
+            return {"status": "ignored"}
 
-    if not envelope.is_event_callback:
-        log.debug(f"Ignoring non-event_callback payload of type {envelope.type}")
-        return {"status": "ignored", "reason": "unsupported_payload_type"}
+        # --- UPDATED CHANNEL LOGIC ---
+        # Allow DMs (channel IDs starting with 'D') or the specific configured channel
+        is_dm = channel.startswith('D')
+        is_main_channel = settings.SLACK_CHANNEL_ID and channel == settings.SLACK_CHANNEL_ID
+        
+        if not (is_dm or is_main_channel):
+            return {"status": "ignored"}
+        # -----------------------------
 
-    service = SlackEventService(db=db, deduplicator=deduplicator)
-    try:
-        result = await service.process_event(envelope, request_id=request_id)
-    except SlackEventQueueError as exc:
-        # The event was valid and actionable but could not be handed to Celery.
-        # A 5xx makes Slack redeliver it, which is the behaviour we want here.
-        log.error(f"Could not enqueue Slack event: {exc}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not queue attendance automation; the event will be retried",
-        )
+        # Handle start report (Works in Main Channel & DMs)
+        if SlackMessageValidator.is_valid_start_report(text):
+            logger.info(f"Valid start report received from user {user}")
+            from app.workers.celery_worker import process_attendance_task
+            process_attendance_task.delay(user, event_id, channel)
+            return {"status": "processing_start"}
 
-    return {
-        "status": result.outcome.value,
-        "request_id": request_id,
-        **({"task_id": result.celery_task_id} if result.celery_task_id else {}),
-        **({"detail": result.detail} if result.detail else {}),
-    }
+        # Handle end report or end command (Works in Main Channel & DMs)
+        if SlackMessageValidator.is_valid_end_report(text) or SlackMessageValidator.is_end_command(text):
+            logger.info(f"Valid end/logout report received from user {user} in {'DM' if is_dm else 'channel'}")
+            from app.workers.celery_worker import process_logout_task
+            process_logout_task.delay(user, event_id, channel)
+            return {"status": "processing_end"}
+            
+    return {"status": "ok"}
