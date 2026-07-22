@@ -6,10 +6,9 @@ class EmployeeBase(BaseModel):
     slack_user_id: str
     slack_username: str
     marsos_email: EmailStr
-    marsos_employee_id: str
 
 class EmployeeCreate(EmployeeBase):
-    marsos_password: str
+    pass
 
 class EmployeeResponse(EmployeeBase):
     id: int
@@ -21,7 +20,6 @@ class EmployeeResponse(EmployeeBase):
 class EmployeeUpdate(BaseModel):
     slack_username: Optional[str] = None
     marsos_email: Optional[EmailStr] = None
-    marsos_employee_id: Optional[str] = None
 
 class Employee(EmployeeBase):
     id: int

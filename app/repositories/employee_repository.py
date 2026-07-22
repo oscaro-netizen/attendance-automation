@@ -3,7 +3,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import Employee
 from app.schemas.schemas import EmployeeCreate, EmployeeUpdate
-from app.utils.security import encrypt_password
 
 class EmployeeRepository:
     def __init__(self, db: AsyncSession):
@@ -22,14 +21,8 @@ class EmployeeRepository:
         return result.scalar_one_or_none()
 
     async def create(self, employee_in: EmployeeCreate) -> Employee:
-        # Separate password for encryption
         data = employee_in.model_dump()
-        password = data.pop("marsos_password")
-        
-        db_employee = Employee(
-            **data,
-            marsos_password_encrypted=encrypt_password(password)
-        )
+        db_employee = Employee(**data)
         self.db.add(db_employee)
         await self.db.commit()
         await self.db.refresh(db_employee)

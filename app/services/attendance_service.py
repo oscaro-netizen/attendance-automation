@@ -29,7 +29,6 @@ from app.repositories.attendance_repository import AttendanceRepository
 from app.repositories.employee_repository import EmployeeRepository
 from app.schemas.schemas import AttendanceLogCreate
 from app.slack.client import SlackClient
-from app.utils.security import CredentialDecryptionError, decrypt_password
 from app.utils.time import local_today, to_local_display, utc_now
 
 
