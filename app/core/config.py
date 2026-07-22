@@ -29,11 +29,6 @@ class Settings(BaseSettings):
 
     # MarsOS Configuration
     MARSOS_BASE_URL: str
-    MARSOS_API_KEY: Optional[str] = None
-    # Explicit provider selection. The API provider is not implemented yet, so
-    # it must be opted into deliberately rather than being switched on as a
-    # side effect of setting MARSOS_API_KEY.
-    MARSOS_PROVIDER: Literal["playwright", "api"] = "playwright"
 
     # Encryption Key
     ENCRYPTION_KEY: str

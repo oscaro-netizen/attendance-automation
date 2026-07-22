@@ -3,7 +3,7 @@ import time
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.employee_repository import EmployeeRepository
 from app.repositories.attendance_repository import AttendanceRepository
-from app.marsos.factory import get_attendance_provider
+from app.marsos.provider import MarsOSPlaywrightProvider
 from app.slack.client import SlackClient
 from app.schemas.schemas import AttendanceLogCreate
 from app.utils.security import decrypt_password
@@ -47,7 +47,7 @@ class AttendanceService:
             return
 
         # Start automation
-        provider = get_attendance_provider()
+        provider = MarsOSPlaywrightProvider()
         start_time = time.time()
         
         # Decrypt password for login
@@ -119,7 +119,7 @@ class AttendanceService:
             return
 
         # 2. Initialize the MarsOS Provider
-        provider = get_attendance_provider()
+        provider = MarsOSPlaywrightProvider()
         
         # 3. Decrypt password
         password = decrypt_password(employee.marsos_password_encrypted) if employee.marsos_password_encrypted else None
@@ -138,10 +138,7 @@ class AttendanceService:
             # 4. Login and Trigger Logout
             login_success = await provider.login(employee.marsos_email, password)
             if login_success:
-                if hasattr(provider, "logout_attendance"):
-                    success = await provider.logout_attendance(employee.marsos_employee_id)
-                else:
-                    success = True
+                success = await provider.logout_attendance(employee.marsos_employee_id)
                 await provider.logout()
             else:
                 if channel_id:

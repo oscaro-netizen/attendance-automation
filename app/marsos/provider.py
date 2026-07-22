@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 from typing import Optional
 from datetime import datetime
 import asyncio
@@ -12,35 +11,7 @@ from app.core.config import settings
 SESSION_DIR = "sessions"
 os.makedirs(SESSION_DIR, exist_ok=True)
 
-class AttendanceProvider(ABC):
-    @abstractmethod
-    async def login(self, email: str, password: str) -> bool:
-        pass
-
-    @abstractmethod
-    async def start_attendance(self, employee_id: str) -> bool:
-        pass
-
-    @abstractmethod
-    async def logout(self) -> None:
-        pass
-
-class MarsOSAPIProvider(AttendanceProvider):
-    """
-    Placeholder for MarsOS API implementation if available.
-    """
-    async def login(self, email: str, password: str) -> bool:
-        # Implement API login
-        return True
-
-    async def start_attendance(self, employee_id: str) -> bool:
-        # Implement API start attendance
-        return True
-
-    async def logout(self) -> None:
-        pass
-
-class MarsOSPlaywrightProvider(AttendanceProvider):
+class MarsOSPlaywrightProvider:
     """
     Playwright implementation for MarsOS attendance automation with session persistence.
     """
