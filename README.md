@@ -6,11 +6,12 @@ This project implements a production-ready attendance automation platform that i
 
 ## Features
 
-- **Slack Integration**: Listens to Slack Events API for specific messages in a configured channel.
+- **Slack Integration**: Listens to Slack Events API for specific messages in a configured channel or in a DM with the bot.
 - **Message Validation**: Validates incoming Slack messages for required keywords and format using regular expressions.
 - **Employee Mapping**: Maps Slack users to MarsOS employees using a dedicated database table.
-- **Attendance Automation**: Starts attendance in MarsOS automatically, either via API or Playwright browser automation.
+- **Attendance Automation**: Starts and ends attendance in MarsOS automatically via Playwright browser automation.
 - **Duplicate Prevention**: Prevents duplicate attendance entries for the same day.
+- **Idempotency**: Slack redeliveries are suppressed in Redis and again by a unique `slack_event_id` constraint, so no action is ever performed twice.
 - **Comprehensive Logging**: Logs all operations, including Slack events, validation, employee lookups, MarsOS interactions, and errors.
 - **Slack Bot Responses**: Provides immediate feedback to employees in Slack regarding attendance status.
 - **Security**: Implements robust security measures including secret encryption, Slack signature verification, and input validation.
@@ -97,6 +98,47 @@ To get the project running for local development and testing, follow these steps
     -   API Documentation (Swagger UI): `http://localhost:8000/docs`
     -   Redoc: `http://localhost:8000/redoc`
 
+## Employee Commands
+
+Employees interact with the platform entirely through Slack, either in the channel
+configured as `SLACK_CHANNEL_ID` or in a DM with the bot (unless
+`SLACK_ALLOW_DIRECT_MESSAGES=false`).
+
+**Start the workday** — post a report containing a `- Start` line, a `Tasks:`
+section, and an `Expected Today:` section:
+
+```
+July 13, 2026 - Start
+
+Tasks:
+• Task A
+
+Expected Today:
+• Goal A
+```
+
+**End the workday** — post the command:
+
+```
+\end
+```
+
+Anything else in the channel is ignored. Bot messages, thread replies, edits, and
+deletions never trigger automation.
+
+## Admin API
+
+The `/api/v1/employees` and `/api/v1/attendance` endpoints expose employee records
+and accept plaintext MarsOS passwords, so they require an `X-Admin-API-Key` header
+matching `ADMIN_API_KEY`. If `ADMIN_API_KEY` is unset these endpoints return `503`
+— they are disabled rather than left unauthenticated.
+
+```bash
+curl -H "X-Admin-API-Key: $ADMIN_API_KEY" http://localhost:8000/api/v1/employees
+```
+
+The Slack webhook authenticates separately, by signature, and needs no admin key.
+
 ## Testing the Automation (Local)
 
 To test the MarsOS automation without a full Slack integration setup, you can use the provided helper scripts:
@@ -118,7 +160,14 @@ For deploying to a production environment, please refer to the `docs/deployment.
 
 ## Running Tests
 
-To run tests, execute the following command within the `app` service container:
+The suite is hermetic — it uses an in-memory SQLite database and fakes for Slack,
+Redis, Celery, and Playwright, so no services need to be running:
+
+```bash
+pytest
+```
+
+Or inside the container:
 
 ```bash
 docker compose exec app pytest

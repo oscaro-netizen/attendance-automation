@@ -16,7 +16,10 @@ async def seed_employee():
         # Check if test employee already exists
         existing = await repo.get_by_slack_id("U_TEST_123")
         if existing:
-            print(f"Test employee already exists: {existing.marsos_email}")
+            from app.utils.security import encrypt_password
+            existing.marsos_password_encrypted = encrypt_password("test_password")
+            await db.commit()
+            print(f"Updated existing test employee password using current encryption key.")
             return
 
         test_employee = EmployeeCreate(
