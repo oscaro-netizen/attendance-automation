@@ -29,8 +29,6 @@ class Employee(Base):
     slack_user_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     slack_username: Mapped[str] = mapped_column(String(100))
     marsos_email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    marsos_employee_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
-    marsos_password_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
     

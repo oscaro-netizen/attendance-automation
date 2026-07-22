@@ -9,6 +9,8 @@ venv/
 
 # Pytest
 .pytest_cache/
+ __pycache__/
+
 
 # Coverage
 .coverage
@@ -31,6 +33,7 @@ htmlcov/
 
 # Playwright
 playwright-report/
+tests/
 test-results/
 traces/
 sessions/
