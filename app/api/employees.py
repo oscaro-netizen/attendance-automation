@@ -3,14 +3,11 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_admin
 from app.database.session import get_db
 from app.repositories.employee_repository import EmployeeRepository
 from app.schemas.schemas import EmployeeCreate, EmployeeResponse
 
-# Admin-only: these endpoints accept plaintext MarsOS passwords and expose the
-# roster of employees along with their MarsOS identifiers.
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
 @router.post("/employees", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)

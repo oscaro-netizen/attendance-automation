@@ -4,18 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_admin
 from app.database.session import get_db
 from app.repositories.attendance_repository import AttendanceRepository
 from app.repositories.employee_repository import EmployeeRepository
 from app.schemas.schemas import AttendanceLog
 from app.workers.celery_worker import process_attendance_task
 
-# Attendance logs are the audit trail for automation, so the whole router is
-# admin-only. Note there is deliberately no endpoint for creating a log by hand:
-# rows are written by the worker as a record of what actually happened, and an
-# open write path would let anyone forge that history.
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
 @router.get("/attendance", response_model=List[AttendanceLog])

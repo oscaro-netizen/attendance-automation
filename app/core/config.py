@@ -33,8 +33,9 @@ class Settings(BaseSettings):
     # Encryption Key
     ENCRYPTION_KEY: str
 
-    # Shared secret guarding the employee/attendance management endpoints.
-    ADMIN_API_KEY: Optional[str] = "dev_secret_admin_key_123"
+    # OpenAPI / Swagger Documentation toggle
+    # Set to False in production environment to hide /docs and /redoc
+    ENABLE_DOCS: bool = True
 
     # Playwright Configuration
     PLAYWRIGHT_HEADLESS: bool = True
