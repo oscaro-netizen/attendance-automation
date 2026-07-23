@@ -1,44 +1,25 @@
-FROM python:3.11-slim-bookworm as builder
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# Install Poetry
-RUN pip install poetry
+# No build toolchain is needed: every dependency ships a wheel.
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir \
+        "fastapi~=0.139.0" \
+        "uvicorn~=0.51.0" \
+        "httpx~=0.27.0" \
+        "pydantic-settings~=2.3.3" \
+        "python-dotenv~=1.0.1"
 
-# Copy pyproject.toml and poetry.lock
-COPY pyproject.toml poetry.lock ./ 
+COPY app ./app
+COPY scripts ./scripts
 
-# Install project dependencies into a virtual environment
-RUN poetry config virtualenvs.in-project true \
-    && poetry install --no-root --no-interaction --no-ansi
+# The token database lives on a mounted volume so it survives redeploys.
+RUN mkdir -p /app/data
 
-# --- Runtime Stage ---
-FROM python:3.11-slim-bookworm as runtime
-
-WORKDIR /app
-
-ENV PYTHONUNBUFFERED 1
-
-# Copy the virtual environment from the builder stage
-COPY --from=builder /app/.venv /app/.venv
-
-# Add poetry to PATH (if needed for CMD, otherwise remove)
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Install Playwright system dependencies and browsers
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    fonts-wqy-zenhei \
-    fonts-noto-color-emoji \
-    fonts-freefont-ttf \
-    && playwright install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY . .
-
-# Expose port for FastAPI
 EXPOSE 8000
 
-# Command to run the FastAPI application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

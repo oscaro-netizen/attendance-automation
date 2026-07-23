@@ -1,44 +1,17 @@
-# Python
 __pycache__/
 *.py[cod]
-*.pyo
-
-# Virtual environments
-.venv/
-venv/
-
-# Pytest
 .pytest_cache/
- __pycache__/
+.ruff_cache/
 
+venv/
+.venv/
 
-# Coverage
-.coverage
-htmlcov/
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-
-# Environment
 .env
-.env.*
-!.env.example
-
-# Logs
-*.log
-
-# Playwright
-playwright-report/
-tests/
-test-results/
-traces/
-sessions/
-artifacts/
-failure_*.png
-
-# Local databases (the test suite uses an in-memory database and needs none)
+data/
 *.db
+
+.idea/
+.vscode/
+
+# LibreOffice lock files
+.~lock.*#
