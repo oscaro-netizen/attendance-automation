@@ -2,15 +2,17 @@
 import hmac
 from typing import Optional
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import APIKeyHeader
 from loguru import logger
 
 from app.core.config import settings
 
 ADMIN_API_KEY_HEADER = "X-Admin-API-Key"
+api_key_header = APIKeyHeader(name=ADMIN_API_KEY_HEADER, auto_error=False)
 
 
-async def require_admin(x_admin_api_key: Optional[str] = Header(default=None)) -> None:
+async def require_admin(x_admin_api_key: Optional[str] = Depends(api_key_header)) -> None:
     """
     Guards the employee and attendance management endpoints.
 
@@ -26,7 +28,7 @@ async def require_admin(x_admin_api_key: Optional[str] = Header(default=None)) -
         logger.error("ADMIN_API_KEY is not configured; admin endpoints are disabled")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Admin API is not configured",
+            detail="Admin API is not configured. Please set ADMIN_API_KEY in your .env file.",
         )
 
     if not x_admin_api_key or not hmac.compare_digest(x_admin_api_key, settings.ADMIN_API_KEY):
