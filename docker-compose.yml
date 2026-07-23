@@ -1,55 +1,4 @@
-# Environment shared by the API and the worker. Every interpolation carries a
-# default so an unset host variable yields a valid value rather than an empty
-# string, which would fail settings validation (e.g. int fields) at startup.
-x-app-env: &app-env
-  DATABASE_URL: postgresql+asyncpg://user:password@db:5432/attendance_db
-  DATABASE_ECHO: ${DATABASE_ECHO:-false}
-  REDIS_URL: redis://redis:6379/0
-  SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:?SLACK_SIGNING_SECRET is required}
-  SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?SLACK_BOT_TOKEN is required}
-  SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
-  SLACK_REQUEST_TIMESTAMP_TOLERANCE_SECONDS: ${SLACK_REQUEST_TIMESTAMP_TOLERANCE_SECONDS:-300}
-  SLACK_EVENT_DEDUPE_TTL_SECONDS: ${SLACK_EVENT_DEDUPE_TTL_SECONDS:-600}
-  SLACK_ALLOW_DIRECT_MESSAGES: ${SLACK_ALLOW_DIRECT_MESSAGES:-true}
-  MARSOS_BASE_URL: ${MARSOS_BASE_URL:?MARSOS_BASE_URL is required}
-  MARSOS_PROVIDER: ${MARSOS_PROVIDER:-playwright}
-  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
-  ADMIN_API_KEY: ${ADMIN_API_KEY:-}
-  ATTENDANCE_TIMEZONE: ${ATTENDANCE_TIMEZONE:-UTC}
-  PLAYWRIGHT_HEADLESS: ${PLAYWRIGHT_HEADLESS:-true}
-  PLAYWRIGHT_SESSION_DIR: /app/sessions
-  PLAYWRIGHT_SESSION_REUSE: ${PLAYWRIGHT_SESSION_REUSE:-true}
-  PLAYWRIGHT_ARTIFACT_DIR: /app/artifacts
-
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-
-    environment:
-      POSTGRES_DB: attendance_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-
-    ports:
-      - "5432:5432"
-
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d attendance_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-
-    ports:
-      - "6379:6379"
-
   app:
     build:
       context: .
@@ -57,43 +6,28 @@ services:
 
     restart: unless-stopped
 
-    command: /app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-
     ports:
       - "8000:8000"
 
-    environment: *app-env
-
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-
-  worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-
-    restart: unless-stopped
-
-    command: /app/.venv/bin/celery -A app.workers.celery_worker:celery_app worker --loglevel=info
-
-    environment: *app-env
+    environment:
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:?SLACK_SIGNING_SECRET is required}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
+      SLACK_TIMESTAMP_TOLERANCE_SECONDS: ${SLACK_TIMESTAMP_TOLERANCE_SECONDS:-300}
+      TIMETRACK_BASE_URL: ${TIMETRACK_BASE_URL:-https://time.marsos.io}
+      TIMETRACK_TIMEOUT_SECONDS: ${TIMETRACK_TIMEOUT_SECONDS:-15}
+      DATABASE_PATH: /app/data/employees.db
+      ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
     volumes:
-      # Browser storage state must be shared by every worker replica, otherwise
-      # each one re-authenticates and they overwrite each other's sessions.
-      - playwright_sessions:/app/sessions
-      - playwright_artifacts:/app/artifacts
+      # Employee tokens must survive container replacement.
+      - token_data:/app/data
 
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
-  postgres_data:
-  playwright_sessions:
-  playwright_artifacts:
+  token_data:

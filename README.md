@@ -1,182 +1,116 @@
-# Slack to MarsOS Attendance Automation Platform
+# Attendance Automation
 
-This project implements a production-ready attendance automation platform that integrates with Slack and MarsOS. Employees report their workday start by posting a structured message in a designated Slack channel, which triggers an automatic attendance timer in MarsOS.
+Post a daily start report in Slack → you get clocked in on
+[TimeTrack](https://time.marsos.io). Post a completed-work report → you get
+clocked out.
 
-**Important Note on Deployment:** This platform is designed as a **server-side solution**. This means the application runs on a central server (e.g., a cloud instance or your company's infrastructure), and employees **do not need to install any software** on their individual machines to use it. Their interaction is solely through Slack.
+That's the whole product.
 
-## Features
-
-- **Slack Integration**: Listens to Slack Events API for specific messages in a configured channel or in a DM with the bot.
-- **Message Validation**: Validates incoming Slack messages for required keywords and format using regular expressions.
-- **Employee Mapping**: Maps Slack users to MarsOS employees using a dedicated database table.
-- **Attendance Automation**: Starts and ends attendance in MarsOS automatically via Playwright browser automation.
-- **Duplicate Prevention**: Prevents duplicate attendance entries for the same day.
-- **Idempotency**: Slack redeliveries are suppressed in Redis and again by a unique `slack_event_id` constraint, so no action is ever performed twice.
-- **Comprehensive Logging**: Logs all operations, including Slack events, validation, employee lookups, MarsOS interactions, and errors.
-- **Slack Bot Responses**: Provides immediate feedback to employees in Slack regarding attendance status.
-- **Security**: Implements robust security measures including secret encryption, Slack signature verification, and input validation.
-- **Scalability**: Designed with a modular architecture to support future expansions (e.g., other chat platforms, multiple attendance providers).
-
-## Technology Stack
-
-- **Backend**: Python 3.13+ with FastAPI
-- **Server**: Uvicorn
-- **Database**: PostgreSQL
-- **ORM**: SQLAlchemy 2.x
-- **Migrations**: Alembic
-- **Configuration**: Pydantic Settings
-- **Authentication**: Slack Signing Secret
-- **Deployment**: Docker, Docker Compose
-- **Logging**: Loguru
-- **Task Queue**: Celery with Redis broker
-- **Browser Automation**: Playwright
-- **Testing**: Pytest
-- **Code Quality**: Ruff, Black, Mypy
-
-## Architecture Overview
-
-Below is a high-level overview of the system architecture:
-
-![Architecture Diagram](docs/architecture_diagram.png)
-
-## Project Structure
+## How it works
 
 ```
-attendance-automation/
-├── app/
-│   ├── api/                  # FastAPI endpoints
-│   ├── services/             # Business logic and service orchestration
-│   ├── repositories/         # Database interaction logic
-│   ├── models/               # SQLAlchemy models
-│   ├── schemas/              # Pydantic schemas for data validation and serialization
-│   ├── core/                 # Core configurations, settings, and utilities
-│   ├── middleware/           # FastAPI middleware for security, logging, etc.
-│   ├── database/             # Database connection, session management, Alembic setup
-│   ├── workers/              # Celery tasks
-│   ├── playwright/           # Playwright browser automation logic
-│   ├── slack/                # Slack API interaction logic
-│   ├── marsos/               # MarsOS integration logic (API/Playwright providers)
-│   └── utils/                # General utility functions
-├── tests/                    # Unit, integration, and end-to-end tests
-├── docker/                   # Dockerfile and related configurations
-├── scripts/                  # Helper scripts (e.g., for setup, deployment)
-├── docs/                     # Project documentation, diagrams
-├── README.md                 # Project overview and setup guide
-├── docker-compose.yml        # Docker Compose configuration for local development
-├── .env.example              # Example environment variables
-└── pyproject.toml            # Project metadata and dependencies
+Slack message
+   ↓  verify signature
+   ↓  is it a start report or a completed-work report?
+   ↓  look up this person's TimeTrack token
+   ↓  GET  /api/attendance/today      (already in that state? stop)
+   ↓  POST /api/attendance/clock-in   (or clock-out)
+  done
 ```
 
-## Setup and Local Development
+No browser automation, no task queue, no attendance records of our own.
+TimeTrack already records attendance — it is the system of record, and its
+`today` endpoint is what stops a redelivered Slack event clocking you in twice.
 
-To get the project running for local development and testing, follow these steps. Ensure you have **Docker** and **Docker Compose** installed on your machine.
+The service never posts to Slack, so it needs no bot token and no `chat:write`
+scope — only the signing secret used to verify incoming webhooks.
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/your-repo/attendance-automation.git
-    cd attendance-automation
-    ```
+## What triggers what
 
-2.  **Environment Variables**: Create a `.env` file by copying `.env.example` and fill in the required values. **These are crucial for the application to function correctly.**
-    ```bash
-    cp .env.example .env
-    ```
-    Edit `.env` with your Slack API credentials and MarsOS details. Refer to the `docs/deployment.md` for a detailed explanation of each variable and what needs to be replaced.
+| Slack message | Result |
+|---|---|
+| A report containing `- Start`, `Tasks:` and `Expected Today:` | Clock in |
+| A report with a line starting `Completed Work` | Clock out |
+| Anything else | Ignored |
 
-3.  **Docker Compose**: Start the services using Docker Compose. This will build the necessary Docker images and bring up the PostgreSQL database, Redis, the FastAPI application, and the Celery worker.
-    ```bash
-    docker compose up --build -d
-    ```
-    The `-d` flag runs the containers in detached mode.
+The `Completed Work` marker must start a line, so writing "I completed work on
+the export" in ordinary chat does not clock you out. Slack formatting makes no
+difference — a bolded `*Completed Work:*` behaves the same.
 
-4.  **Database Migrations**: Once the services are running, apply database migrations to set up the database schema:
-    ```bash
-    docker compose exec app alembic upgrade head
-    ```
-
-5.  **Access the Application**: The FastAPI application will be accessible at `http://localhost:8000`.
-    -   API Documentation (Swagger UI): `http://localhost:8000/docs`
-    -   Redoc: `http://localhost:8000/redoc`
-
-## Employee Commands
-
-Employees interact with the platform entirely through Slack, either in the channel
-configured as `SLACK_CHANNEL_ID` or in a DM with the bot (unless
-`SLACK_ALLOW_DIRECT_MESSAGES=false`).
-
-**Start the workday** — post a report containing a `- Start` line, a `Tasks:`
-section, and an `Expected Today:` section:
-
-```
-July 13, 2026 - Start
-
-Tasks:
-• Task A
-
-Expected Today:
-• Goal A
-```
-
-**End the workday** — post the command:
-
-```
-\end
-```
-
-Anything else in the channel is ignored. Bot messages, thread replies, edits, and
-deletions never trigger automation.
-
-## Admin API
-
-The `/api/v1/employees` and `/api/v1/attendance` endpoints expose employee records
-and accept plaintext MarsOS passwords, so they require an `X-Admin-API-Key` header
-matching `ADMIN_API_KEY`. If `ADMIN_API_KEY` is unset these endpoints return `503`
-— they are disabled rather than left unauthenticated.
+## Setup
 
 ```bash
-curl -H "X-Admin-API-Key: $ADMIN_API_KEY" http://localhost:8000/api/v1/employees
+cp .env.example .env          # then fill in SLACK_SIGNING_SECRET
+docker compose up -d --build
+curl localhost:8000/health
 ```
 
-The Slack webhook authenticates separately, by signature, and needs no admin key.
+Point your Slack app's **Event Subscriptions → Request URL** at
+`https://<host>/slack/events` and subscribe to `message.channels`
+(and `message.im` if you want commands to work in DMs).
 
-## Testing the Automation (Local)
+## Registering an employee
 
-To test the MarsOS automation without a full Slack integration setup, you can use the provided helper scripts:
+Each person supplies their own TimeTrack token, which is what authorises the
+service to clock them in and out.
 
-1.  **Seed a Test Employee**: Add a dummy employee to your database.
-    ```bash
-    docker compose exec app python scripts/seed_data.py
-    ```
-
-2.  **Trigger Automation**: Manually trigger the attendance automation for the seeded test employee.
-    ```bash
-    docker compose exec app python scripts/trigger_automation.py --slack-id U_TEST_123
-    ```
-    This will simulate a Slack message and attempt to start attendance in MarsOS via Playwright.
-
-## Deployment
-
-For deploying to a production environment, please refer to the `docs/deployment.md` file for detailed instructions, including environment variable management and CI/CD examples.
-
-## Running Tests
-
-The suite is hermetic — it uses an in-memory SQLite database and fakes for Slack,
-Redis, Celery, and Playwright, so no services need to be running:
+To get one: sign in to TimeTrack, open DevTools → **Network**, click any button,
+select the request, and copy the value after `Bearer ` in the `Authorization`
+header.
 
 ```bash
-pytest
+python scripts/employees.py add --slack-id U04TQ9XKMLR --label ada
+# prompts for the token (hidden input, so it stays out of shell history)
 ```
 
-Or inside the container:
+The Slack member ID is on their Slack profile under ⋮ → *Copy member ID*. It
+starts with `U`, and is not their display name.
+
+Other commands:
 
 ```bash
-docker compose exec app pytest
+python scripts/employees.py list
+python scripts/employees.py check  --slack-id U04TQ9XKMLR   # is the token still good?
+python scripts/employees.py remove --slack-id U04TQ9XKMLR
 ```
 
-## Contributing
+`check` prints the token's expiry and calls TimeTrack with it, which is the
+fastest way to confirm someone is set up correctly.
 
-Contributions are welcome! Please refer to `CONTRIBUTING.md` (to be created) for guidelines.
+## When a token expires
 
-## License
+TimeTrack rejects it, the service logs
+`TimeTrack rejected the token; it needs re-registering`, and that person's
+clock-ins stop working. Fix: run `add` again with a fresh token — it replaces
+the old one.
 
-This project is licensed under the MIT License. See the `LICENSE` file (to be created) for details.
+Nothing is posted to Slack, so **failures are silent to the employee.** Watch
+`docker compose logs -f app` if something seems wrong.
+
+## Tests
+
+```bash
+python -m pytest -q
+```
+
+## Layout
+
+```
+app/
+  main.py          webhook route, filtering, and the TimeTrack action
+  config.py        settings
+  slack_verify.py  HMAC signature verification
+  messages.py      what counts as a start or completed-work report
+  timetrack.py     TimeTrack API client
+  store.py         Slack user -> token mapping (SQLite)
+scripts/
+  employees.py     register / list / check / remove
+```
+
+## Notes
+
+- The token database (`data/employees.db`) holds bearer credentials. It is
+  chmod `600` and git-ignored. Back it up somewhere private, or employees will
+  need to re-register.
+- `/docs` and the OpenAPI schema are disabled by default. Set
+  `ENABLE_API_DOCS=true` locally if you want them.
