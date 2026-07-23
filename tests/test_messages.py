@@ -17,35 +17,46 @@ def test_a_full_start_report_clocks_in():
     assert classify(START_REPORT) is Action.CLOCK_IN
 
 
-COMPLETED_REPORT = """July 23, 2026 - End
+END_REPORT = """July 23, 2026 - End
 
-Completed Work:
-• Invoice export merged
-• Reviewed Ada's pull request
+Completed Tasks:
+• Invoice export - Done
+• Ada's pull request - Done
 """
 
 
-def test_a_completed_work_report_clocks_out():
-    assert classify(COMPLETED_REPORT) is Action.CLOCK_OUT
+def test_a_full_end_report_clocks_out():
+    assert classify(END_REPORT) is Action.CLOCK_OUT
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        "Completed Work:\n• a",           # no date line above it
-        "completed work:\n• a",           # lower case
-        "COMPLETED WORK\n• a",            # upper case, no colon
-        "Completed  Work:\n• a",          # extra space
-        "  Completed Work:\n• a",         # leading whitespace
+        "July 23, 2026 - End",              # header alone
+        "July 23, 2026 - Complete",
+        "July 23, 2026 - Done",
+        "July 23, 2026 - Summary",
+        "End of Day",
+        "Evening Report",
+        "Completed Tasks:\n• a",            # section alone, no header
+        "Tasks Completed:\n• a",
+        "Tasks Done:\n• a",
+        "completed tasks:\n• a",            # lower case
+        "  Completed Tasks:\n• a",          # leading whitespace
     ],
 )
-def test_completed_work_is_recognised_in_its_common_forms(text):
+def test_end_reports_are_recognised_in_their_documented_forms(text):
     assert classify(text) is Action.CLOCK_OUT
 
 
-def test_markdown_wrapped_completed_report_still_clocks_out():
+def test_markdown_wrapped_end_report_still_clocks_out():
     """Slack sends formatting characters verbatim; bolding must not break it."""
-    assert classify("*Completed Work:*\n• a") is Action.CLOCK_OUT
+    assert classify("*Completed Tasks:*\n• a") is Action.CLOCK_OUT
+
+
+def test_a_start_report_is_never_mistaken_for_an_end_report():
+    """The start report contains 'Tasks:', which must not match the end patterns."""
+    assert classify(START_REPORT) is Action.CLOCK_IN
 
 
 @pytest.mark.parametrize(
@@ -58,8 +69,8 @@ def test_markdown_wrapped_completed_report_still_clocks_out():
         "July 23, 2026 - Start",  # missing Tasks: and Expected Today:
         "Tasks:\n• something",  # missing the start line
         "July 23, 2026 - Start\n\nTasks:\n• a",  # missing Expected Today:
-        "I completed work on the export today",  # marker not at the start of a line
-        "we should discuss completed work tomorrow",
+        "we should review completed tasks tomorrow",  # marker not at line start
+        "I am done for now",
     ],
 )
 def test_ordinary_messages_are_ignored(text):

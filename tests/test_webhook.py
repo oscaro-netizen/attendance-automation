@@ -50,9 +50,9 @@ def test_a_start_report_from_a_registered_employee_is_accepted(client, actions):
     assert actions == [(USER, Action.CLOCK_IN, "tok-123")]
 
 
-def test_a_completed_work_report_clocks_out(client, actions):
+def test_an_end_report_clocks_out(client, actions):
     put_token(USER, "tok-123")
-    post(client, message(text="July 23, 2026 - End\n\nCompleted Work:\n• invoice export merged"))
+    post(client, message(text="July 23, 2026 - End\n\nCompleted Tasks:\n• invoice export - Done"))
     assert actions == [(USER, Action.CLOCK_OUT, "tok-123")]
 
 

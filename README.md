@@ -1,7 +1,7 @@
 # Attendance Automation
 
 Post a daily start report in Slack → you get clocked in on
-[TimeTrack](https://time.marsos.io). Post a completed-work report → you get
+[TimeTrack](https://time.marsos.io). Post your end-of-day report → you get
 clocked out.
 
 That's the whole product.
@@ -11,7 +11,7 @@ That's the whole product.
 ```
 Slack message
    ↓  verify signature
-   ↓  is it a start report or a completed-work report?
+   ↓  is it a start report or an end-of-day report?
    ↓  look up this person's TimeTrack token
    ↓  GET  /api/attendance/today      (already in that state? stop)
    ↓  POST /api/attendance/clock-in   (or clock-out)
@@ -30,12 +30,17 @@ scope — only the signing secret used to verify incoming webhooks.
 | Slack message | Result |
 |---|---|
 | A report containing `- Start`, `Tasks:` and `Expected Today:` | Clock in |
-| A report with a line starting `Completed Work` | Clock out |
+| A report with a `- End` / `- Complete` / `- Done` header, **or** a `Completed Tasks:` section | Clock out |
 | Anything else | Ignored |
 
-The `Completed Work` marker must start a line, so writing "I completed work on
-the export" in ordinary chat does not clock you out. Slack formatting makes no
-difference — a bolded `*Completed Work:*` behaves the same.
+For the end report, either marker alone is enough — the header or the section.
+Accepted header words: `End`, `Complete`, `Completed`, `Done`, `Stop`,
+`Summary`, `Finish`, `Finished`, `Evening`, plus `End of Day`, `Evening Report`
+and `Daily End`. Accepted section headings: `Completed Tasks:`,
+`Tasks Completed:`, `Completed:`, `Tasks Done:`, `Tasks Finished:`, `Summary:`.
+
+All markers must start a line, so "we'll review completed tasks tomorrow" in
+ordinary chat does not clock you out. Slack formatting makes no difference.
 
 ## Setup
 
@@ -100,7 +105,7 @@ app/
   main.py          webhook route, filtering, and the TimeTrack action
   config.py        settings
   slack_verify.py  HMAC signature verification
-  messages.py      what counts as a start or completed-work report
+  messages.py      what counts as a start or end-of-day report
   timetrack.py     TimeTrack API client
   store.py         Slack user -> token mapping (SQLite)
 scripts/
