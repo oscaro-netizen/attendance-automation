@@ -11,7 +11,7 @@ Endpoints used:
     POST /api/attendance/clock-out  end the workday
 """
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -42,7 +42,7 @@ def _first_present(payload: dict[str, Any], keys: tuple[str, ...]) -> tuple[bool
     return False, None
 
 
-def is_clocked_in(today: dict[str, Any]) -> Optional[bool]:
+def is_clocked_in(today: dict[str, Any]) -> bool | None:
     """
     Works out whether the employee is currently clocked in.
 
@@ -53,12 +53,11 @@ def is_clocked_in(today: dict[str, Any]) -> Optional[bool]:
     if not isinstance(today, dict):
         return None
 
-    # Some APIs nest the day under a wrapper key.
-    for wrapper in ("data", "attendance", "today"):
+    # Some APIs nest the day under wrapper keys like data -> current.
+    for wrapper in ("data", "attendance", "today", "current"):
         inner = today.get(wrapper)
         if isinstance(inner, dict):
             today = inner
-            break
 
     has_in, clock_in = _first_present(today, _CLOCK_IN_KEYS)
     has_out, clock_out = _first_present(today, _CLOCK_OUT_KEYS)
@@ -72,11 +71,11 @@ def is_clocked_in(today: dict[str, Any]) -> Optional[bool]:
 
 
 class TimeTrackClient:
-    def __init__(self, token: str, base_url: Optional[str] = None, timeout: Optional[float] = None):
+    def __init__(self, token: str, base_url: str | None = None, timeout: float | None = None):
         self._token = token
         self._base_url = (base_url or settings.TIMETRACK_BASE_URL).rstrip("/")
         self._timeout = timeout if timeout is not None else settings.TIMETRACK_TIMEOUT_SECONDS
-        self._transport: Optional[httpx.AsyncBaseTransport] = None
+        self._transport: httpx.AsyncBaseTransport | None = None
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
